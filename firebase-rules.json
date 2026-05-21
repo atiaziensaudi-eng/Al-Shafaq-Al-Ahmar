@@ -1,0 +1,188 @@
+{
+  "rules": {
+    ".read":  "false",
+    ".write": "false",
+
+    "users": {
+      ".read": "auth != null && root.child('users').child(auth.uid).child('globalRole').val() === 'super_admin'",
+      "$uid": {
+        ".read":  "auth != null && (auth.uid === $uid || root.child('users').child(auth.uid).child('globalRole').val() === 'super_admin')",
+        ".write": "auth != null && (auth.uid === $uid || root.child('users').child(auth.uid).child('globalRole').val() === 'super_admin')",
+        ".validate": "newData.hasChildren(['email','name','createdAt'])",
+        "email":      { ".validate": "newData.isString() && newData.val().matches(/^[^@]+@[^@]+\\.[^@]+$/) && newData.val().length <= 150" },
+        "name":       { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 100" },
+        "globalRole": { ".validate": "!newData.exists() || (newData.isString() && newData.val() === 'super_admin')" },
+        "createdAt":  { ".validate": "newData.isNumber() && newData.val() > 0" },
+        "lastLoginAt":{ ".validate": "newData.isNumber() && newData.val() > 0" },
+        "photoURL":   { ".validate": "newData.isString() && newData.val().length <= 500" },
+        "deviceInfo": { ".validate": "newData.isObject()" },
+        "stations": {
+          "$stationId": {
+            ".validate": "newData.hasChildren(['role','assignedAt','assignedBy'])",
+            "role":       { ".validate": "newData.isString() && (newData.val() === 'admin' || newData.val() === 'manager' || newData.val() === 'employee' || newData.val() === 'accountant')" },
+            "assignedAt": { ".validate": "newData.isNumber() && newData.val() > 0" },
+            "assignedBy": { ".validate": "newData.isString() && newData.val().length > 0" }
+          }
+        }
+      }
+    },
+
+    "stations": {
+      "$stationId": {
+        ".read": "auth != null && (root.child('users').child(auth.uid).child('stations').child($stationId).exists() || root.child('users').child(auth.uid).child('globalRole').val() === 'super_admin')",
+
+        "config": {
+          ".read":  "auth != null && (root.child('users').child(auth.uid).child('stations').child($stationId).exists() || root.child('users').child(auth.uid).child('globalRole').val() === 'super_admin')",
+          ".write": "auth != null && (root.child('users').child(auth.uid).child('stations').child($stationId).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('globalRole').val() === 'super_admin')",
+          ".validate": "newData.hasChildren(['name','currency','taxRate','updatedAt'])",
+          "name":      { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 100" },
+          "currency":  { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 10" },
+          "taxRate":   { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100" },
+          "updatedAt": { ".validate": "newData.isNumber() && newData.val() > 0" },
+          "address":   { ".validate": "newData.isString() && newData.val().length <= 300" },
+          "phone":     { ".validate": "newData.isString() && newData.val().length <= 20" },
+          "fuelPrices": {
+            "diesel": { ".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= 1000" },
+            "fuel91": { ".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= 1000" },
+            "fuel95": { ".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= 1000" }
+          },
+          "lowStockThreshold": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+          "timezone":          { ".validate": "newData.isString() && newData.val().length <= 50" }
+        },
+
+        "inventory": {
+          ".read":  "auth != null && (root.child('users').child(auth.uid).child('stations').child($stationId).exists() || root.child('users').child(auth.uid).child('globalRole').val() === 'super_admin')",
+          ".write": "auth != null && root.child('users').child(auth.uid).child('stations').child($stationId).exists() && root.child('users').child(auth.uid).child('stations').child($stationId).child('role').val() !== 'accountant'",
+          "diesel":    { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 10000000" },
+          "fuel91":    { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 10000000" },
+          "fuel95":    { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 10000000" },
+          "updatedBy": { ".validate": "newData.isString() && newData.val() === auth.uid" },
+          "updatedAt": { ".validate": "newData.isNumber() && newData.val() > 0" }
+        },
+
+        "shifts": {
+          ".read": "auth != null && (root.child('users').child(auth.uid).child('stations').child($stationId).exists() || root.child('users').child(auth.uid).child('globalRole').val() === 'super_admin')",
+          "$shiftId": {
+            ".write": "auth != null && root.child('users').child(auth.uid).child('stations').child($stationId).exists() && root.child('users').child(auth.uid).child('stations').child($stationId).child('role').val() !== 'accountant' && (!data.exists() || data.child('userId').val() === auth.uid || root.child('users').child(auth.uid).child('stations').child($stationId).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('stations').child($stationId).child('role').val() === 'manager') && (newData.exists() || root.child('users').child(auth.uid).child('stations').child($stationId).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('globalRole').val() === 'super_admin')",
+            ".validate": "newData.hasChildren(['date','userId','stationId','startTime','totalLiters','totalRevenue','timestamp','syncId'])",
+            "date":         { ".validate": "newData.isString() && newData.val().length === 10" },
+            "userId":       { ".validate": "newData.isString() && newData.val().length > 0" },
+            "stationId":    { ".validate": "newData.isString() && newData.val() === $stationId" },
+            "startTime":    { ".validate": "newData.isString() && newData.val().length > 0" },
+            "endTime":      { ".validate": "newData.isString()" },
+            "totalLiters":  { ".validate": "newData.isNumber() && newData.val() >= 0" },
+            "totalRevenue": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+            "timestamp":    { ".validate": "newData.isNumber() && newData.val() > 0" },
+            "syncId":       { ".validate": "newData.isString() && newData.val().length > 0" },
+            "status":       { ".validate": "newData.isString() && (newData.val() === 'open' || newData.val() === 'closed' || newData.val() === 'pending')" },
+            "items": {
+              ".validate": "newData.isObject()",
+              "$itemId": {
+                ".validate": "newData.hasChildren(['pumpType','liters','pricePerLiter','totalPrice','soldAt'])",
+                "pumpType":      { ".validate": "newData.isString() && (newData.val() === 'diesel' || newData.val() === 'fuel91' || newData.val() === 'fuel95')" },
+                "liters":        { ".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= 100000" },
+                "pricePerLiter": { ".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= 10000" },
+                "totalPrice":    { ".validate": "newData.isNumber() && newData.val() >= 0" },
+                "soldAt":        { ".validate": "newData.isNumber() && newData.val() > 0" },
+                "pumpId":        { ".validate": "newData.isString() && newData.val().length > 0" }
+              }
+            }
+          }
+        },
+
+        "supply": {
+          ".read": "auth != null && (root.child('users').child(auth.uid).child('stations').child($stationId).exists() || root.child('users').child(auth.uid).child('globalRole').val() === 'super_admin')",
+          "$supplyId": {
+            ".write": "auth != null && (root.child('users').child(auth.uid).child('stations').child($stationId).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('stations').child($stationId).child('role').val() === 'manager' || root.child('users').child(auth.uid).child('globalRole').val() === 'super_admin')",
+            ".validate": "newData.hasChildren(['date','userId','stationId','pumpType','liters','pricePerLiter','totalCost','timestamp','syncId'])",
+            "date":          { ".validate": "newData.isString() && newData.val().length === 10" },
+            "userId":        { ".validate": "newData.isString() && newData.val() === auth.uid" },
+            "stationId":     { ".validate": "newData.isString() && newData.val() === $stationId" },
+            "pumpType":      { ".validate": "newData.isString() && (newData.val() === 'diesel' || newData.val() === 'fuel91' || newData.val() === 'fuel95')" },
+            "liters":        { ".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= 10000000" },
+            "pricePerLiter": { ".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= 10000" },
+            "totalCost":     { ".validate": "newData.isNumber() && newData.val() >= 0" },
+            "timestamp":     { ".validate": "newData.isNumber() && newData.val() > 0" },
+            "syncId":        { ".validate": "newData.isString() && newData.val().length > 0" },
+            "supplier":      { ".validate": "newData.isString() && newData.val().length <= 200" },
+            "invoiceNo":     { ".validate": "newData.isString() && newData.val().length <= 100" }
+          }
+        },
+
+        "activityLog": {
+          ".read": "auth != null && (root.child('users').child(auth.uid).child('stations').child($stationId).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('stations').child($stationId).child('role').val() === 'manager' || root.child('users').child(auth.uid).child('stations').child($stationId).child('role').val() === 'accountant' || root.child('users').child(auth.uid).child('globalRole').val() === 'super_admin')",
+          "$logId": {
+            ".write": "auth != null && (!data.exists() && root.child('users').child(auth.uid).child('stations').child($stationId).exists() || root.child('users').child(auth.uid).child('globalRole').val() === 'super_admin')",
+            ".validate": "newData.hasChildren(['action','userId','stationId','timestamp','syncId'])",
+            "action":    { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 100" },
+            "userId":    { ".validate": "newData.isString() && newData.val() === auth.uid" },
+            "stationId": { ".validate": "newData.isString() && newData.val() === $stationId" },
+            "timestamp": { ".validate": "newData.isNumber() && newData.val() > 0" },
+            "syncId":    { ".validate": "newData.isString() && newData.val().length > 0" },
+            "userName":  { ".validate": "newData.isString() && newData.val().length <= 100" },
+            "device":    { ".validate": "newData.isString() && newData.val().length <= 200" },
+            "oldValues": { ".validate": "newData.isObject()" },
+            "newValues": { ".validate": "newData.isObject()" },
+            "severity":  { ".validate": "newData.isString() && (newData.val() === 'info' || newData.val() === 'warning' || newData.val() === 'error' || newData.val() === 'critical')" }
+          }
+        },
+
+        "snapshots": {
+          ".read": "auth != null && (root.child('users').child(auth.uid).child('stations').child($stationId).exists() || root.child('users').child(auth.uid).child('globalRole').val() === 'super_admin')",
+          "$date": {
+            ".write": "auth != null && (root.child('users').child(auth.uid).child('stations').child($stationId).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('globalRole').val() === 'super_admin')",
+            ".validate": "newData.hasChildren(['diesel','fuel91','fuel95','totalShifts','totalRevenue','totalLiters','timestamp'])",
+            "diesel":       { ".validate": "newData.isNumber() && newData.val() >= 0" },
+            "fuel91":       { ".validate": "newData.isNumber() && newData.val() >= 0" },
+            "fuel95":       { ".validate": "newData.isNumber() && newData.val() >= 0" },
+            "totalShifts":  { ".validate": "newData.isNumber() && newData.val() >= 0" },
+            "totalRevenue": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+            "totalLiters":  { ".validate": "newData.isNumber() && newData.val() >= 0" },
+            "timestamp":    { ".validate": "newData.isNumber() && newData.val() > 0" },
+            "closedBy":     { ".validate": "newData.isString() && newData.val().length > 0" }
+          }
+        },
+
+        "syncQueue": {
+          ".read": "auth != null && root.child('users').child(auth.uid).child('stations').child($stationId).exists()",
+          "$queueId": {
+            ".write": "auth != null && (!data.exists() && root.child('users').child(auth.uid).child('stations').child($stationId).exists() || data.child('userId').val() === auth.uid || root.child('users').child(auth.uid).child('stations').child($stationId).child('role').val() === 'admin')",
+            ".validate": "newData.hasChildren(['type','data','timestamp','userId','syncId','stationId'])",
+            "type":      { ".validate": "newData.isString() && (newData.val() === 'SHIFT' || newData.val() === 'SUPPLY' || newData.val() === 'INVENTORY' || newData.val() === 'CONFIG')" },
+            "data":      { ".validate": "newData.isObject()" },
+            "timestamp": { ".validate": "newData.isNumber() && newData.val() > 0" },
+            "userId":    { ".validate": "newData.isString() && newData.val() === auth.uid" },
+            "stationId": { ".validate": "newData.isString() && newData.val() === $stationId" },
+            "syncId":    { ".validate": "newData.isString() && newData.val().length > 0" },
+            "status":    { ".validate": "newData.isString() && (newData.val() === 'pending' || newData.val() === 'processing' || newData.val() === 'done' || newData.val() === 'failed')" },
+            "retries":   { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 5" }
+          }
+        },
+
+        "notifications": {
+          ".read":  "auth != null && root.child('users').child(auth.uid).child('stations').child($stationId).exists()",
+          ".write": "auth != null && (root.child('users').child(auth.uid).child('stations').child($stationId).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('stations').child($stationId).child('role').val() === 'manager' || root.child('users').child(auth.uid).child('globalRole').val() === 'super_admin')",
+          "$notifId": {
+            ".validate": "newData.hasChildren(['type','message','timestamp','stationId'])",
+            "type":      { ".validate": "newData.isString() && (newData.val() === 'low_stock' || newData.val() === 'large_sale' || newData.val() === 'system_error' || newData.val() === 'shift_closed' || newData.val() === 'supply_received')" },
+            "message":   { ".validate": "newData.isString() && newData.val().length <= 500" },
+            "timestamp": { ".validate": "newData.isNumber() && newData.val() > 0" },
+            "stationId": { ".validate": "newData.isString() && newData.val() === $stationId" },
+            "isRead":    { ".validate": "newData.isBoolean()" },
+            "severity":  { ".validate": "newData.isString() && (newData.val() === 'info' || newData.val() === 'warning' || newData.val() === 'critical')" }
+          }
+        },
+
+        "analytics": {
+          ".read":  "auth != null && (root.child('users').child(auth.uid).child('stations').child($stationId).exists() || root.child('users').child(auth.uid).child('globalRole').val() === 'super_admin')",
+          ".write": "auth != null && (root.child('users').child(auth.uid).child('stations').child($stationId).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('stations').child($stationId).child('role').val() === 'manager' || root.child('users').child(auth.uid).child('globalRole').val() === 'super_admin')"
+        }
+      }
+    },
+
+    "globalStats": {
+      ".read":  "auth != null && root.child('users').child(auth.uid).child('globalRole').val() === 'super_admin'",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('globalRole').val() === 'super_admin'"
+    }
+  }
+}
