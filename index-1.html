@@ -1,0 +1,1002 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>الشفق الأحمر v15 — نظام إدارة محطة الوقود</title>
+
+<!-- ===== PWA ===== -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#C0392B">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="محطة الوقود">
+<!-- أيقونة iOS -->
+<link rel="apple-touch-icon" href="icon-192-maskable.png">
+<!-- Splash screen color for iOS -->
+<meta name="msapplication-TileColor" content="#C0392B">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&family=Tajawal:wght@300;400;500;700;800&display=swap" rel="stylesheet">
+
+<!-- ===== FIREBASE CDN (Compat SDK v10.14.1) ===== -->
+<!-- ⚠️ لا تغيّر إلى SDK v12 المعياري — الكود كله يستخدم Compat API -->
+<!-- ⚠️ لا تستخدم import/module — firebase-config.js يعتمد على firebase.* العالمي -->
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- LOGIN OVERLAY -->
+  <div class="login-overlay open" id="loginOverlay">
+    <div class="login-card">
+      <div class="login-header">
+        <div class="login-logo">⛽</div>
+        <div class="gold-line"></div>
+        <h2 id="stationNameLogin">محطة الوقود</h2>
+        <p>نظام إدارة المحطة المتكامل</p>
+      </div>
+      <div class="login-body">
+        <div class="form-group">
+          <label class="form-label">البريد الإلكتروني</label>
+          <input type="email" class="form-input" id="loginEmail" placeholder="example@email.com">
+        </div>
+        <div class="form-group">
+          <label class="form-label">كلمة المرور</label>
+          <input type="password" class="form-input" id="loginPassword" placeholder="••••••••">
+        </div>
+        <div id="loginError" class="alert alert-danger" style="display:none">بيانات الدخول غير صحيحة</div>
+        <button class="btn btn-primary btn-full mt-8" onclick="doLogin()">🔐 دخول</button>
+        <div class="text-center mt-8 text-sm text-muted">نظام إدارة محطات الوقود v2.0</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SETUP WIZARD -->
+  <div class="setup-overlay" id="setupOverlay">
+    <div class="setup-card">
+      <div class="setup-header">
+        <div class="setup-logo">⛽</div>
+        <h2>إعداد المحطة</h2>
+        <p>أدخل بيانات محطتك لبدء العمل</p>
+      </div>
+      <div class="setup-body">
+        <div class="step-indicator" id="stepIndicator"></div>
+
+        <!-- Step 1: Station Info -->
+        <div class="setup-step active" id="step1">
+          <div class="section-title">🏢 معلومات المحطة</div>
+          <div class="form-group">
+            <label class="form-label">اسم المحطة *</label>
+            <input type="text" class="form-input" id="s_stationName" placeholder="محطة النور">
+          </div>
+          <div class="form-group">
+            <label class="form-label">الموقع</label>
+            <input type="text" class="form-input" id="s_stationLocation" placeholder="الرياض، حي النزهة">
+          </div>
+          <div class="form-group">
+            <label class="form-label">بريد المالك *</label>
+            <input type="email" class="form-input" id="s_ownerEmail" placeholder="owner@example.com">
+          </div>
+          <div class="form-group">
+            <label class="form-label">كلمة مرور المالك *</label>
+            <input type="password" class="form-input" id="s_ownerPass" placeholder="••••••••">
+          </div>
+          <div class="form-group">
+            <label class="form-label">يوم بدء الشهر (للتقارير الشهرية)</label>
+            <input type="number" class="form-input" id="s_monthStart" value="1" min="1" max="28" placeholder="1">
+          </div>
+        </div>
+
+        <!-- Step 2: Fuel Prices -->
+        <div class="setup-step" id="step2">
+          <div class="section-title">💰 أسعار الوقود (ريال/لتر)</div>
+          <div class="form-group">
+            <label class="form-label">سعر الديزل</label>
+            <input type="number" class="form-input" id="s_dieselPrice" value="0.69" step="0.01" placeholder="0.69">
+          </div>
+          <div class="form-group">
+            <label class="form-label">سعر 91</label>
+            <input type="number" class="form-input" id="s_91Price" value="1.29" step="0.01" placeholder="1.29">
+          </div>
+          <div class="form-group">
+            <label class="form-label">سعر 95</label>
+            <input type="number" class="form-input" id="s_95Price" value="1.79" step="0.01" placeholder="1.79">
+          </div>
+          <div class="section-title mt-12">⏰ الوردیات</div>
+          <div class="form-group">
+            <label class="form-label">عدد الورديات اليومية</label>
+            <select class="form-select" id="s_shiftsCount" onchange="renderShiftNames()">
+              <option value="2">2 وردية</option>
+              <option value="3">3 ورديات</option>
+              <option value="4">4 ورديات</option>
+            </select>
+          </div>
+          <div id="shiftNamesContainer"></div>
+          <div class="form-group mt-8">
+            <label class="form-label">الحد الأدنى للمخزون التحذيري (لتر)</label>
+            <input type="number" class="form-input" id="s_minStock" value="5000" placeholder="5000">
+          </div>
+        </div>
+
+        <!-- Step 3: Pumps -->
+        <div class="setup-step" id="step3">
+          <div class="section-title">⛽ إعداد الطلمبات</div>
+          <p class="text-sm text-muted mb-8">أضف الطلمبات وحدد نوع كل واحدة والعداد الافتتاحي</p>
+          <div id="pumpsContainer"></div>
+          <button class="btn btn-ghost btn-full mt-8" onclick="addPumpConfig()">+ إضافة طلمبة</button>
+        </div>
+
+        <!-- Step 4: Opening Stock -->
+        <div class="setup-step" id="step4">
+          <div class="section-title">🛢️ المخزون الافتتاحي (لتر)</div>
+          <div class="form-group">
+            <label class="form-label">مخزون الديزل</label>
+            <input type="number" class="form-input" id="s_dieselStock" placeholder="0">
+          </div>
+          <div class="form-group">
+            <label class="form-label">مخزون 91</label>
+            <input type="number" class="form-input" id="s_91Stock" placeholder="0">
+          </div>
+          <div class="form-group">
+            <label class="form-label">مخزون 95</label>
+            <input type="number" class="form-input" id="s_95Stock" placeholder="0">
+          </div>
+        </div>
+
+        <div class="flex-between mt-12">
+          <button class="btn btn-ghost" id="prevStepBtn" onclick="prevStep()" style="display:none">→ السابق</button>
+          <button class="btn btn-primary" id="nextStepBtn" onclick="nextStep()">التالي ←</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN HEADER -->
+  <div class="header" id="mainHeader" style="display:none">
+    <div class="header-title">
+      ⛽ <span id="headerStationName">المحطة</span>
+      <span class="gold" style="font-size:11px; opacity:0.85" id="headerDate"></span>
+      <span class="gold" style="font-size:10px; opacity:0.7" id="headerHijriDate"></span>
+    </div>
+    <div class="header-right">
+      <span class="badge-user" id="headerUser">مالك</span>
+      <span id="syncIndicator" style="font-size:11px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);border-radius:20px;padding:3px 8px;white-space:nowrap;cursor:pointer" onclick="_flushPendingSync()" title="اضغط للمزامنة اليدوية">🟡 جارٍ</span>
+      <button id="darkToggleBtn" onclick="toggleDarkMode()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);border-radius:20px;padding:3px 10px;font-size:14px;cursor:pointer;color:white" title="وضع مظلم">🌙</button>
+      <button class="btn btn-ghost btn-sm" onclick="logout()" style="font-size:11px">خروج</button>
+    </div>
+  </div>
+
+
+  <!-- SHIFT TIMER BAR -->
+  <div class="shift-timer-bar" id="shiftTimerBar" style="display:none">
+    <div style="display:flex;align-items:center;gap:8px;flex:1">
+      <button id="startTimerBtn" onclick="startShiftTimer()" class="btn btn-ghost btn-sm" style="font-size:11px">⏱️ بدء وردية</button>
+      <button id="stopTimerBtn" onclick="stopShiftTimer()" class="btn btn-sm" style="display:none;font-size:11px;background:#C0392B;color:white">⏹️ إيقاف</button>
+      <div id="shiftTimerWidget">
+        <span style="font-size:11px;color:var(--gray-500)">مدة الوردية:</span>
+        <span id="shiftTimerDisplay" style="font-family:monospace;font-weight:800;font-size:15px;color:var(--red)">00:00:00</span>
+      </div>
+    </div>
+    <button id="cashierModeBtn" onclick="toggleCashierMode()" class="btn btn-ghost btn-sm" style="font-size:11px">🧾 وضع الكاشير</button>
+  </div>
+
+  <!-- NAV BAR -->
+  <div class="nav-bar" id="mainNav" style="display:none">
+    <button class="nav-btn active" onclick="showPage('home', this)" data-cashier="1"><span class="nav-icon">🏠</span><span class="nav-label">الرئيسية</span></button>
+    <button class="nav-btn" onclick="showPage('entry', this)" data-cashier="1"><span class="nav-icon">📝</span><span class="nav-label">إدخال</span></button>
+    <button class="nav-btn" onclick="showPage('audit', this)" data-cashier="1"><span class="nav-icon">📑</span><span class="nav-label">جرد</span></button>
+    <button class="nav-btn" onclick="showPage('meters', this)"><span class="nav-icon">🔢</span><span class="nav-label">العدادات</span></button>
+    <button class="nav-btn" onclick="showPage('log', this)"><span class="nav-icon">📋</span><span class="nav-label">السجل</span></button>
+    <button class="nav-btn" onclick="showPage('inventory', this)"><span class="nav-icon">🛢️</span><span class="nav-label">المخزون</span></button>
+    <button class="nav-btn" onclick="showPage('instant', this)"><span class="nav-icon">⚡</span><span class="nav-label">لحظي</span></button>
+    <button class="nav-btn" onclick="showPage('supply', this)"><span class="nav-icon">🚛</span><span class="nav-label">التوريد</span></button>
+    <button class="nav-btn" onclick="showPage('reports', this)"><span class="nav-icon">📊</span><span class="nav-label">تقارير</span></button>
+    <button class="nav-btn" id="dashboardNavBtn" onclick="showPage('dashboard', this)" style="display:none"><span class="nav-icon">📈</span><span class="nav-label">لوحة التحكم</span></button>
+    <button class="nav-btn" id="auditLogNavBtn" onclick="showPage('auditlog', this)" style="display:none"><span class="nav-icon">📑</span><span class="nav-label">سجل الجرد</span></button>
+    <button class="nav-btn" id="activityNavBtn" onclick="showPage('activitylog', this)" style="display:none"><span class="nav-icon">📜</span><span class="nav-label">الأنشطة</span></button>
+    <button class="nav-btn" id="backupNavBtn" onclick="showPage('backup', this)" style="display:none"><span class="nav-icon">💾</span><span class="nav-label">نسخ احتياطي</span></button>
+    <button class="nav-btn" id="settingsNavBtn" onclick="showPage('settings', this)" style="display:none"><span class="nav-icon">⚙️</span><span class="nav-label">الإعدادات</span></button>
+  </div>
+
+  <!-- ===== PAGE: HOME ===== -->
+  <div class="page active" id="page-home">
+    <div id="homeAlerts"></div>
+
+    <!-- hidden legacy IDs for JS compatibility -->
+    <div style="display:none">
+      <span id="todayDate">—</span>
+      <span id="home_todayDiesel">0</span><span id="home_todayDieselRial">0 ر.س</span>
+      <span id="home_today91">0</span><span id="home_today91Rial">0 ر.س</span>
+      <span id="home_today95">0</span><span id="home_today95Rial">0 ر.س</span>
+      <span id="home_todayTotal">0 لتر</span><span id="home_todayMoney">0 ر.س</span>
+    </div>
+
+    <!-- ① آخر وردية ────────────────────────────────────────── -->
+    <div class="card" style="margin-bottom:10px">
+      <div class="card-header">
+        <span class="card-title">🕐 آخر وردية</span>
+        <span id="home_lastShiftType" class="tag tag-morning">—</span>
+      </div>
+      <div class="card-body">
+        <div class="stats-grid">
+          <div class="stat-box diesel">
+            <div class="stat-label">⬛ ديزل</div>
+            <div class="stat-value" id="home_lastDiesel">0</div>
+            <div class="stat-sub" id="home_lastDieselR">0 ر.س</div>
+          </div>
+          <div class="stat-box n91">
+            <div class="stat-label">🟢 بنزين 91</div>
+            <div class="stat-value" id="home_last91">0</div>
+            <div class="stat-sub" id="home_last91R">0 ر.س</div>
+          </div>
+          <div class="stat-box n95">
+            <div class="stat-label">🔴 بنزين 95</div>
+            <div class="stat-value" id="home_last95">0</div>
+            <div class="stat-sub" id="home_last95R">0 ر.س</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ② زر نسخ ملخص آخر وردية للواتساب ────────────────── -->
+    <div style="margin-bottom:12px">
+      <button class="btn btn-whatsapp btn-full" onclick="shareLastShiftWhatsApp()" style="font-size:13px;padding:10px;background:#128C7E;color:white;border:none;border-radius:10px;font-weight:800">
+        📱 مشاركة ملخص آخر وردية
+      </button>
+    </div>
+
+    <!-- ③ ملخص اليوم ─────────────────────────────────────── -->
+    <div class="card" style="margin-bottom:10px">
+      <div class="card-header">
+        <h3 style="display:flex;align-items:center;gap:8px">
+          <span>⏱️</span><span>استهلاك اليوم</span>
+        </h3>
+        <span data-sync-indicator style="font-size:11px;font-weight:700;color:var(--gold)">✅ متزامن</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;padding:14px 12px 12px">
+        <div data-counter="diesel" style="border-radius:12px;text-align:center;min-height:90px;display:flex;flex-direction:column;align-items:center;justify-content:center"></div>
+        <div data-counter="fuel91" style="border-radius:12px;text-align:center;min-height:90px;display:flex;flex-direction:column;align-items:center;justify-content:center"></div>
+        <div data-counter="fuel95" style="border-radius:12px;text-align:center;min-height:90px;display:flex;flex-direction:column;align-items:center;justify-content:center"></div>
+      </div>
+      <div style="padding:12px;display:flex;flex-direction:column;gap:8px;border-top:1px dashed #eee">
+        <div style="display:flex;gap:6px">
+          <input type="number" id="dieselInput" class="form-input" placeholder="اللترات" min="0" step="0.1" style="flex:1">
+          <button class="btn btn-primary" onclick="(function(){var v=parseFloat(document.getElementById('dieselInput').value||0);if(v>0){CountersAPI.updateCounter('diesel',v);document.getElementById('dieselInput').value=''}})()" style="min-width:90px;background:#F9E87A;color:#7D6608;font-weight:700;border:2px solid #D4AC0D">⬜ ديزل</button>
+        </div>
+        <div style="display:flex;gap:6px">
+          <input type="number" id="fuel91Input" class="form-input" placeholder="اللترات" min="0" step="0.1" style="flex:1">
+          <button class="btn btn-primary" onclick="(function(){var v=parseFloat(document.getElementById('fuel91Input').value||0);if(v>0){CountersAPI.updateCounter('fuel91',v);document.getElementById('fuel91Input').value=''}})()" style="min-width:90px;background:#27ae60">🟢 91</button>
+        </div>
+        <div style="display:flex;gap:6px">
+          <input type="number" id="fuel95Input" class="form-input" placeholder="اللترات" min="0" step="0.1" style="flex:1">
+          <button class="btn btn-primary" onclick="(function(){var v=parseFloat(document.getElementById('fuel95Input').value||0);if(v>0){CountersAPI.updateCounter('fuel95',v);document.getElementById('fuel95Input').value=''}})()" style="min-width:90px;background:#d35400">🔴 95</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ④ زر نسخ ملخص اليوم للواتساب ─────────────────────── -->
+    <div style="margin-bottom:12px">
+      <button class="btn btn-gold btn-full" onclick="copySummary()" style="font-size:14px;padding:11px">📋 نسخ ملخص اليوم للواتساب</button>
+    </div>
+
+    <!-- ⑤ المخزون الحالي ─────────────────────────────────── -->
+    <div class="card" style="margin-bottom:10px">
+      <div class="card-header">
+        <span class="card-title">🛢️ المخزون الحالي</span>
+      </div>
+      <div class="card-body">
+        <div id="inventoryStatusHome"></div>
+      </div>
+    </div>
+
+    <!-- ⑥ تقرير الفترة منذ آخر جرد ─────────────────────── -->
+    <div class="card" id="sinceAuditCard" style="margin-bottom:10px;display:none;border:2px solid rgba(47,79,79,0.35)">
+      <div class="card-header" style="background:linear-gradient(90deg,rgba(47,79,79,0.12),transparent)">
+        <h3 style="display:flex;align-items:center;gap:8px;color:#2F4F4F;font-size:14px">
+          <span>📊</span><span>تقرير الفترة منذ آخر جرد</span>
+        </h3>
+        <button class="btn btn-ghost btn-sm" onclick="updateSinceAuditWidget()" style="font-size:10px">🔄</button>
+      </div>
+      <div id="sinceAuditContent" style="padding:12px"></div>
+    </div>
+
+    <!-- ⑦ مقارنة المبيعات ───────────────────────────────── -->
+    <div class="card" style="margin-bottom:10px">
+      <div class="card-header">
+        <h3 style="display:flex;align-items:center;gap:8px"><span>📊</span><span>مقارنة المبيعات</span></h3>
+        <span style="font-size:11px;color:var(--gray-500)">اليوم مقابل أمس</span>
+      </div>
+      <div style="padding:12px" id="homeDayComparison">
+        <div style="text-align:center;color:var(--gray-400);font-size:12px;padding:10px">جارٍ التحميل…</div>
+      </div>
+    </div>
+
+    <!-- لوحة المالك السريعة -->
+    <div class="card" id="homeOwnerPanel" style="margin-bottom:10px;display:none">
+      <div class="card-header">
+        <h3 style="display:flex;align-items:center;gap:8px"><span>👁️</span><span>لوحة المالك</span></h3>
+      </div>
+      <div style="padding:12px"></div>
+    </div>
+
+    <!-- الرسوم البيانية -->
+    <div class="card" style="margin-bottom:10px">
+      <div class="card-header">
+        <span class="card-title">📊 الاستهلاك - آخر 7 أيام</span>
+        <button class="btn btn-ghost btn-sm" onclick="renderCharts()" style="font-size:11px">🔄</button>
+      </div>
+      <div class="card-body">
+        <div class="chart-container">
+          <canvas id="consumptionChart" width="400" height="180"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:10px">
+      <div class="card-header">
+        <span class="card-title">💰 الإيرادات - آخر 30 يوم</span>
+      </div>
+      <div class="card-body">
+        <div class="chart-container">
+          <canvas id="monthlyRevenueChart" width="400" height="140"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- الإحصائيات الأسبوعية والشهرية -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">📈 الإحصائيات</span></div>
+      <div class="card-body">
+        <div class="flex-between mb-8">
+          <span class="fw-bold text-sm">📅 أسبوعياً (7 أيام)</span>
+          <span class="text-sm text-gold" id="home_weekMoney">0 ر.س</span>
+        </div>
+        <div class="stats-grid mb-8" style="gap:6px">
+          <div class="stat-box diesel" style="padding:8px"><div class="stat-label" style="font-size:10px">ديزل</div><div class="stat-value" style="font-size:14px" id="home_weekDiesel">0</div></div>
+          <div class="stat-box n91" style="padding:8px"><div class="stat-label" style="font-size:10px">91</div><div class="stat-value" style="font-size:14px" id="home_week91">0</div></div>
+          <div class="stat-box n95" style="padding:8px"><div class="stat-label" style="font-size:10px">95</div><div class="stat-value" style="font-size:14px" id="home_week95">0</div></div>
+        </div>
+        <div class="flex-between mb-8">
+          <span class="fw-bold text-sm">🗓️ شهرياً</span>
+          <span class="text-sm text-gold" id="home_monthMoney">0 ر.س</span>
+        </div>
+        <div class="stats-grid" style="gap:6px">
+          <div class="stat-box diesel" style="padding:8px"><div class="stat-label" style="font-size:10px">ديزل</div><div class="stat-value" style="font-size:14px" id="home_monthDiesel">0</div></div>
+          <div class="stat-box n91" style="padding:8px"><div class="stat-label" style="font-size:10px">91</div><div class="stat-value" style="font-size:14px" id="home_month91">0</div></div>
+          <div class="stat-box n95" style="padding:8px"><div class="stat-label" style="font-size:10px">95</div><div class="stat-value" style="font-size:14px" id="home_month95">0</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== PAGE: ENTRY ===== -->
+  <div class="page" id="page-entry">
+    <div class="section-title" style="margin-bottom:12px">📝 إدخال الوردية</div>
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-header">
+        <span class="card-title">📅 الوردية والتاريخ</span>
+      </div>
+      <div class="card-body" style="padding:14px">
+        <div class="form-group" style="margin-bottom:12px">
+          <label class="form-label" style="font-size:13px">الوردية</label>
+          <select class="form-select" id="entry_shiftType" style="font-size:14px;padding:10px" onchange="_invalidatePendingEntry()"></select>
+        </div>
+        <div class="form-group" style="margin-bottom:8px">
+          <label class="form-label" style="font-size:13px">التاريخ</label>
+          <input type="date" class="form-input" id="entry_date" style="font-size:14px;padding:10px" onchange="updateEntryDateDisplay(); _invalidatePendingEntry();">
+        </div>
+        <div id="entryDateDisplay" style="background:var(--gray-100);border-radius:8px;padding:8px 12px;font-size:12.5px;color:var(--gray-700);line-height:1.8;display:none">
+        </div>
+      </div>
+    </div>
+
+    <div class="section-title" style="margin-bottom:12px">⛽ قراءات الطلمبات</div>
+
+    <!-- Pumps Entry -->
+    <div id="pumpsEntryContainer"></div>
+
+    <!-- Calculate Button -->
+    <button class="btn btn-gold btn-full mb-8" onclick="calcEntry()" style="padding:14px;font-size:16px;margin-top:4px">🔢 احسب الاستهلاك</button>
+
+    <!-- Results -->
+    <div id="entryResults" style="display:none">
+      <div class="card">
+        <div class="card-header"><span class="card-title">📊 نتائج الاستهلاك</span></div>
+        <div class="card-body">
+          <div class="stats-grid mb-8">
+            <div class="stat-box diesel">
+              <div class="stat-label">ديزل (لتر)</div>
+              <div class="stat-value" id="res_dieselL">0</div>
+              <div class="stat-sub" id="res_dieselR">0 ر.س</div>
+            </div>
+            <div class="stat-box n91">
+              <div class="stat-label">91 (لتر)</div>
+              <div class="stat-value" id="res_91L">0</div>
+              <div class="stat-sub" id="res_91R">0 ر.س</div>
+            </div>
+            <div class="stat-box n95">
+              <div class="stat-label">95 (لتر)</div>
+              <div class="stat-value" id="res_95L">0</div>
+              <div class="stat-sub" id="res_95R">0 ر.س</div>
+            </div>
+          </div>
+          <div class="totals-section">
+            <div class="total-item">
+              <div class="total-label">الإجمالي الكلي</div>
+              <div class="total-value copyable" id="res_totalMoney">0 ر.س<span class="copy-hint">نسخ</span></div>
+            </div>
+          </div>
+          <!-- Payment Split -->
+          <div class="mt-8">
+            <div class="section-title" style="font-size:13px; margin-bottom:8px">💳 تقسيم المبلغ</div>
+            <div class="payment-grid">
+              <div class="payment-item">
+                <div class="payment-label">🌐 شبكة</div>
+                <input type="number" class="form-input" id="pay_network" placeholder="0" oninput="calcCash()">
+              </div>
+              <div class="payment-item">
+                <div class="payment-label">📄 فواتير</div>
+                <input type="number" class="form-input" id="pay_invoices" placeholder="0" oninput="calcCash()">
+              </div>
+              <div class="payment-item">
+                <div class="payment-label">📦 تم توريده</div>
+                <input type="number" class="form-input" id="pay_supplied" placeholder="0" oninput="calcCash()">
+              </div>
+              <div class="payment-item cash">
+                <div class="payment-label">💵 نقدية</div>
+                <div class="payment-value" id="pay_cash">0</div>
+              </div>
+            </div>
+          </div>
+          <button class="btn btn-primary btn-full mt-8" onclick="saveShift()">💾 حفظ الوردية</button>
+          <div class="flex-row mt-8" style="gap:8px">
+            <button class="btn btn-whatsapp" onclick="shareShiftWhatsApp()" style="flex:1;justify-content:center">📱 واتساب</button>
+            <button class="btn btn-ghost" onclick="printShiftReport()" style="flex:1;justify-content:center">🖨️ طباعة</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== PAGE: AUDIT (جرد) — صفحة مستقلة، محتواها يُرسَم بالكامل من audit-page.js ===== -->
+  <div class="page" id="page-audit"></div>
+
+  <!-- ===== PAGE: METERS ===== -->
+  <div class="page" id="page-meters">
+    <div class="flex-between mb-8">
+      <div class="section-title" style="margin-bottom:0">🔢 سجل العدادات</div>
+      <button class="btn btn-sm btn-ghost" id="deleteMeterBtn" onclick="showDeleteMeterOptions()" style="display:none;font-size:11px;color:var(--red);border-color:var(--red)">🗑️ حذف عداد</button>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">🔢 سجل العدادات</span></div>
+      <div class="card-body">
+        <div class="table-scroll">
+          <table id="metersTable">
+            <thead><tr id="metersTableHeader"></tr></thead>
+            <tbody id="metersTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== PAGE: LOG ===== -->
+  <div class="page" id="page-log">
+    <div class="flex-between mb-8">
+      <div class="section-title" style="margin-bottom:0">📋 سجل الورديات</div>
+      <button class="btn btn-sm btn-ghost" id="editLastShiftBtn" onclick="editLastShift()" style="display:none">✏️ تعديل آخر وردية</button>
+    </div>
+    <div class="log-search">
+      <span>🔍</span>
+      <input type="text" placeholder="بحث في الورديات..." oninput="filterLog(this.value)" id="logSearchInput">
+      <button onclick="document.getElementById('logSearchInput').value='';filterLog('')" style="border:none;background:transparent;cursor:pointer;color:var(--gray-500);font-size:14px">✕</button>
+    </div>
+    <div id="logContainer"></div>
+  </div>
+
+  <!-- ===== PAGE: INVENTORY ===== -->
+  <div class="page" id="page-inventory">
+    <!-- [FIX v10] بطاقة ملخص المخزون مع المتوسط والأيام المتبقية -->
+    <div id="inventorySummaryCard" class="card" style="margin-bottom:12px">
+      <div class="card-header">
+        <span class="card-title">🛢️ حالة المخزون الحالية</span>
+        <button class="btn btn-ghost btn-sm" onclick="renderInventoryTable()" style="font-size:11px">🔄</button>
+      </div>
+      <div class="card-body" id="inventorySummaryBody" style="padding:10px">
+        <div class="stats-grid" style="gap:8px">
+          <div class="stat-box diesel" style="padding:10px">
+            <div class="stat-label" style="font-size:11px;font-weight:800;color:#7D5C00">⬛ ديزل</div>
+            <div class="stat-value" id="invSum_diesel" style="font-size:18px;color:#7D5C00">—</div>
+            <div style="font-size:9.5px;color:var(--gray-500);margin-top:2px" id="invAvg_diesel">—</div>
+            <div style="font-size:10px;font-weight:800;color:#7D5C00;margin-top:3px" id="invDays_diesel">—</div>
+          </div>
+          <div class="stat-box n91" style="padding:10px">
+            <div class="stat-label" style="font-size:11px;font-weight:800;color:#145A32">🟢 91</div>
+            <div class="stat-value" id="invSum_n91" style="font-size:18px;color:#145A32">—</div>
+            <div style="font-size:9.5px;color:var(--gray-500);margin-top:2px" id="invAvg_n91">—</div>
+            <div style="font-size:10px;font-weight:800;color:#145A32;margin-top:3px" id="invDays_n91">—</div>
+          </div>
+          <div class="stat-box n95" style="padding:10px">
+            <div class="stat-label" style="font-size:11px;font-weight:800;color:#922B21">🔴 95</div>
+            <div class="stat-value" id="invSum_n95" style="font-size:18px;color:#922B21">—</div>
+            <div style="font-size:9.5px;color:var(--gray-500);margin-top:2px" id="invAvg_n95">—</div>
+            <div style="font-size:10px;font-weight:800;color:#922B21;margin-top:3px" id="invDays_n95">—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Adjust Stock -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">🛢️ المخزون</span>
+        <button class="btn btn-sm btn-ghost" onclick="toggleAdjustStock()" style="font-size:11px;padding:4px 8px;white-space:nowrap">⚖️ معادلة</button>
+      </div>
+      <div id="adjustStockPanel" style="display:none; padding:12px; border-bottom:1px solid var(--gray-200)">
+        <div class="section-title" style="font-size:13px">⚖️ معادلة المخزون</div>
+        <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; align-items:end;">
+          <div class="form-group" style="margin:0">
+            <label class="form-label">نوع الوقود</label>
+            <select class="form-select" id="adj_fuelType">
+              <option value="">-- اختر --</option>
+              <option value="diesel">⛽ ديزل</option>
+              <option value="n91">🟢 بنزين 91</option>
+              <option value="n95">🔴 بنزين 95</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin:0">
+            <label class="form-label">العملية</label>
+            <select class="form-select" id="adj_operation">
+              <option value="">-- اختر --</option>
+              <option value="add">➕ إضافة (جمع)</option>
+              <option value="sub">➖ خصم (طرح)</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin:0">
+            <label class="form-label">الكمية (لتر)</label>
+            <input type="number" class="form-input" id="adj_qty" placeholder="0" min="0">
+          </div>
+        </div>
+        <button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="applyAdjustment()">✅ تطبيق المعادلة</button>
+      </div>
+      <div class="card-body" style="padding:0;overflow:hidden">
+        <div class="inv-table-wrap" style="width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch">
+          <table class="inv-table" style="min-width:820px;width:max-content">
+            <thead>
+              <tr>
+                <th style="min-width:110px;padding:12px 10px">التاريخ / الوردية</th>
+                <th style="background:#F9E87A;color:#7D6608;min-width:90px;padding:12px 8px">مخزون الديزل</th>
+                <th style="background:#F9E87A;color:#7D6608;min-width:85px;padding:12px 8px">مخزون 91</th>
+                <th style="background:#F9E87A;color:#7D6608;min-width:85px;padding:12px 8px">مخزون 95</th>
+                <th style="background:#27AE60;color:white;min-width:90px;padding:12px 8px">استهلاك الديزل</th>
+                <th style="background:#27AE60;color:white;min-width:85px;padding:12px 8px">استهلاك 91</th>
+                <th style="background:#27AE60;color:white;min-width:85px;padding:12px 8px">استهلاك 95</th>
+                <th style="background:#1E8449;color:white;min-width:100px;padding:12px 8px">استهلاك اليوم ديزل</th>
+                <th style="background:#1E8449;color:white;min-width:95px;padding:12px 8px">استهلاك اليوم 91</th>
+                <th style="background:#1E8449;color:white;min-width:95px;padding:12px 8px">استهلاك اليوم 95</th>
+                <th style="background:var(--gold-dark);min-width:120px;padding:12px 8px">معادلة المخزون</th>
+              </tr>
+            </thead>
+            <tbody id="inventoryTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== PAGE: INSTANT ===== -->
+  <div class="page" id="page-instant">
+    <div class="alert alert-info">⚡ الاستهلاك اللحظي — رقابي فقط، لا يؤثر على المخزون</div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">⚡ قراءات لحظية</span></div>
+      <div class="card-body">
+        <div id="instantPumpsContainer"></div>
+        <div class="flex-row mt-8">
+          <button class="btn btn-gold" onclick="calcInstant()">🔢 احسب الاستهلاك</button>
+          <button class="btn btn-primary" onclick="calcInstantReserve()">🛢️ احسب الاحتياطي</button>
+        </div>
+      </div>
+    </div>
+    <div id="instantResults" style="display:none">
+      <div class="card">
+        <div class="card-header"><span class="card-title">📊 النتائج اللحظية</span></div>
+        <div class="card-body">
+          <!-- Hidden static ids for compatibility -->
+          <span id="inst_diesel" style="display:none">0</span>
+          <span id="inst_91" style="display:none">0</span>
+          <span id="inst_95" style="display:none">0</span>
+          <!-- Dynamic boxes showing only entered fuel types -->
+          <div id="instantConsumptionBoxes" class="stats-grid mb-8"></div>
+          <div id="instantReserveResults"></div>
+          <button class="btn btn-primary btn-sm mt-8" onclick="sendToSupply()">📤 إرسال للتوريد</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== PAGE: SUPPLY ===== -->
+  <div class="page" id="page-supply">
+    <!-- Instant data panel (shown when sent from instant page) -->
+    <div id="supplyInstantInfo" style="display:none;background:rgba(212,172,13,0.07);border:1px solid var(--gold);border-radius:10px;padding:12px;margin-bottom:12px"></div>
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">🚛 تسجيل توريد جديد</span>
+      </div>
+      <div class="card-body">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+          <div class="form-group">
+            <label class="form-label">نوع الوقود</label>
+            <select class="form-select" id="sup_type">
+              <option value="diesel">ديزل</option>
+              <option value="91">91</option>
+              <option value="95">95</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">الكمية (لتر)</label>
+            <input type="number" class="form-input" id="sup_qty" placeholder="0">
+          </div>
+          <div class="form-group">
+            <label class="form-label">التاريخ</label>
+            <input type="date" class="form-input" id="sup_date">
+          </div>
+          <div class="form-group">
+            <label class="form-label">رقم الفاتورة</label>
+            <input type="text" class="form-input" id="sup_invoice">
+          </div>
+          <div class="form-group">
+            <label class="form-label">اسم السائق</label>
+            <input type="text" class="form-input" id="sup_driver">
+          </div>
+          <div class="form-group">
+            <label class="form-label">رقم السيارة</label>
+            <input type="text" class="form-input" id="sup_truck">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">الناقل</label>
+          <input type="text" class="form-input" id="sup_carrier">
+        </div>
+        <button class="btn btn-primary btn-full mt-8" onclick="confirmSupply()">💾 حفظ التوريد</button>
+      </div>
+    </div>
+    <div class="section-title mt-12">📋 سجل التوريدات</div>
+    <div id="supplyLog"></div>
+  </div>
+
+  <!-- ===== PAGE: REPORTS ===== -->
+  <div class="page" id="page-reports">
+    <div class="card">
+      <div class="card-header"><span class="card-title">📊 إنشاء تقرير</span></div>
+      <div class="card-body">
+        <div class="form-group">
+          <label class="form-label">نوع التقرير</label>
+          <select class="form-select" id="rep_type" onchange="toggleReportOptions()">
+            <option value="today">يومي - اليوم</option>
+            <option value="week">أسبوعي</option>
+            <option value="month">شهري</option>
+            <option value="custom">مخصص</option>
+          </select>
+        </div>
+        <div id="customReportOptions" style="display:none">
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+            <div class="form-group">
+              <label class="form-label">من تاريخ</label>
+              <input type="date" class="form-input" id="rep_from">
+            </div>
+            <div class="form-group">
+              <label class="form-label">إلى تاريخ</label>
+              <input type="date" class="form-input" id="rep_to">
+            </div>
+            <div class="form-group">
+              <label class="form-label">من وردية</label>
+              <select class="form-select" id="rep_fromShift"></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">إلى وردية</label>
+              <select class="form-select" id="rep_toShift"></select>
+            </div>
+          </div>
+        </div>
+        <div class="flex-row mt-8">
+          <button class="btn btn-primary" onclick="generateReport()">🔄 إنشاء التقرير</button>
+          <button class="btn btn-gold" onclick="printReport()">🖨️ طباعة</button>
+          <button class="btn btn-primary" onclick="exportReportPDF()">📄 تصدير PDF</button>
+          <button class="btn btn-ghost" onclick="exportReportCSV()" style="border-color:var(--gray-300)">📥 تصدير Excel</button>
+        </div>
+      </div>
+    </div>
+    <div id="reportOutput"></div>
+  </div>
+
+  <!-- ===== PAGE: SETTINGS ===== -->
+  <div class="page" id="page-settings">
+    <div class="section-title">⚙️ الإعدادات</div>
+
+
+    <!-- Reset Daily Counters -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">🔄 إعادة تعيين عدادات اليوم</span></div>
+      <div class="card-body">
+        <p class="text-sm text-muted mb-8">يُصفّر عدادات الديزل / 91 / 95 اليومية (ملخص اليوم في الصفحة الرئيسية). لا يؤثر على الورديات أو المخزون.</p>
+        <button class="btn btn-ghost btn-sm" onclick="resetDailyCounters()" style="color:var(--red);border-color:var(--red)">🔄 تصفير عدادات اليوم</button>
+      </div>
+    </div>
+
+    <!-- Archive -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">📦 الأرشفة الشهرية</span></div>
+      <div class="card-body">
+        <p class="text-sm text-muted mb-8">يتم أرشفة البيانات بعد تجاوز يوم بداية الشهر بيوم واحد. تشفير الشهر السابق وحفظه.</p>
+        <button class="btn btn-gold" onclick="archiveMonth()">📦 أرشفة الشهر السابق</button>
+      </div>
+    </div>
+
+    <!-- Prices -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">💰 تحديث أسعار الوقود</span></div>
+      <div class="card-body">
+        <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px;">
+          <div class="form-group">
+            <label class="form-label">ديزل (ر.س/لتر)</label>
+            <input type="number" class="form-input" id="cfg_dieselPrice" step="0.01">
+          </div>
+          <div class="form-group">
+            <label class="form-label">91 (ر.س/لتر)</label>
+            <input type="number" class="form-input" id="cfg_91Price" step="0.01">
+          </div>
+          <div class="form-group">
+            <label class="form-label">95 (ر.س/لتر)</label>
+            <input type="number" class="form-input" id="cfg_95Price" step="0.01">
+          </div>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="savePrices()">💾 حفظ الأسعار</button>
+      </div>
+    </div>
+
+    <!-- Add User -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">👤 إضافة موظف</span></div>
+      <div class="card-body">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+          <div class="form-group">
+            <label class="form-label">البريد الإلكتروني</label>
+            <input type="email" class="form-input" id="newUserEmail" placeholder="emp@example.com">
+          </div>
+          <div class="form-group">
+            <label class="form-label">كلمة المرور</label>
+            <input type="password" class="form-input" id="newUserPass" placeholder="••••••••">
+          </div>
+          <div class="form-group">
+            <label class="form-label">الاسم</label>
+            <input type="text" class="form-input" id="newUserName" placeholder="اسم الموظف">
+          </div>
+          <div class="form-group">
+            <label class="form-label">الدور</label>
+            <select class="form-select" id="newUserRole">
+              <option value="employee">👤 موظف</option>
+              <option value="cashier">🧾 كاشير</option>
+              <option value="supervisor">🔍 مشرف</option>
+              <option value="manager">📋 مدير</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="addUser()">➕ إضافة</button>
+      </div>
+    </div>
+
+    <!-- Users List -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">👥 المستخدمون</span></div>
+      <div class="card-body" id="usersList"></div>
+    </div>
+
+    <!-- Station Info -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">🏢 معلومات المحطة</span></div>
+      <div class="card-body">
+        <div class="form-group">
+          <label class="form-label">اسم المحطة</label>
+          <input type="text" class="form-input" id="cfg_stationName">
+        </div>
+        <div class="form-group">
+          <label class="form-label">الموقع</label>
+          <input type="text" class="form-input" id="cfg_stationLocation">
+        </div>
+        <div class="form-group">
+          <label class="form-label">يوم بداية الشهر</label>
+          <input type="number" class="form-input" id="cfg_monthStart" min="1" max="28">
+        </div>
+        <div class="form-group">
+          <label class="form-label">الحد الأدنى للمخزون التحذيري</label>
+          <input type="number" class="form-input" id="cfg_minStock">
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="saveStationInfo()">💾 حفظ</button>
+      </div>
+    </div>
+
+    <!-- ===== Factory Reset ===== -->
+    <div class="card" style="border:2px solid #C0392B;margin-top:16px;">
+      <div class="card-header" style="background:linear-gradient(90deg,rgba(192,57,43,0.12),rgba(192,57,43,0.04));">
+        <span class="card-title" style="color:var(--red);font-size:15px;">⚠️ إعادة تهيئة المحطة</span>
+        <span style="font-size:10px;font-weight:700;background:#FFEBEE;color:#922B21;padding:2px 8px;border-radius:12px;border:1px solid #E74C3C;">للمالك فقط</span>
+      </div>
+      <div class="card-body">
+        <div class="alert alert-danger" style="margin-bottom:14px;font-size:12.5px;line-height:1.7;">
+          <div style="font-weight:800;font-size:13px;margin-bottom:6px;">⛔ تحذير: هذا الإجراء لا يمكن التراجع عنه!</div>
+          <div>سيتم <strong>حذف</strong>: جميع الورديات، قراءات العدادات، سجلات المخزون، سجلات التوريد، وسجل الأنشطة.</div>
+          <div style="margin-top:4px;color:#1B5E20;font-weight:700;">✅ سيتم <strong>الاحتفاظ</strong> بـ: إعدادات المحطة، أسعار الوقود، بيانات المستخدمين، والأرقام الافتتاحية الأولى.</div>
+        </div>
+        <button class="btn btn-full" onclick="factoryResetStation()"
+          style="background:linear-gradient(135deg,#7B241C,#C0392B);color:white;padding:14px 16px;font-size:15px;font-weight:800;border-radius:10px;box-shadow:0 3px 10px rgba(192,57,43,0.4);letter-spacing:0.3px;">
+          🔄 إعادة تهيئة المحطة
+        </button>
+        <p style="font-size:11px;color:var(--gray-500);text-align:center;margin-top:8px;">ستعود المحطة للحالة الصفرية الجاهزة للعمل فوراً بناءً على الأرقام الافتتاحية</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== PAGE: DASHBOARD (OWNER ONLY) ===== -->
+  <div class="page" id="page-dashboard">
+    <div class="section-title">📈 لوحة تحكم المالك</div>
+
+    <!-- [v12] بطاقة "منذ آخر جرد" في لوحة التحكم -->
+    <div class="card" style="margin-bottom:14px;border:2px solid #2F4F4F">
+      <div class="card-header" style="background:linear-gradient(90deg,rgba(47,79,79,0.2),transparent)">
+        <h3 style="display:flex;align-items:center;gap:8px;color:#2F4F4F">
+          <span>📊</span><span>تقرير الفترة منذ آخر جرد</span>
+        </h3>
+        <button class="btn btn-ghost btn-sm" onclick="updateSinceAuditWidget();_renderDashboardAuditSection()" style="font-size:10px">🔄</button>
+      </div>
+      <div id="dashAuditContent" style="padding:12px">
+        <div class="alert alert-info" style="font-size:12px">اضغط تحديث لعرض بيانات الفترة</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="card-title">📊 استهلاك اليوم</span></div>
+      <div class="card-body">
+        <canvas id="dashConsumptionChart" width="400" height="180"></canvas>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">💰 الإيرادات - آخر 30 يوم</span></div>
+      <div class="card-body">
+        <canvas id="dashRevenueChart" width="400" height="140"></canvas>
+      </div>
+    </div>
+    <div id="dashboardContent"></div>
+  </div>
+
+  <!-- ===== PAGE: AUDIT LOG ===== -->
+  <div class="page" id="page-auditlog">
+    <div class="section-title">📑 سجل تقارير الجرد</div>
+    <div id="auditLogContainer">
+      <div class="alert alert-info">لا توجد سجلات جرد بعد. سجّل جرداً أولاً من صفحة الإدخال.</div>
+    </div>
+  </div>
+
+  <!-- ===== PAGE: ACTIVITY LOG (OWNER + SUPERVISOR) ===== -->
+  <div class="page" id="page-activitylog">
+    <div class="flex-between mb-8">
+      <div class="section-title" style="margin-bottom:0">📜 سجل الأنشطة</div>
+      <button class="btn btn-sm btn-ghost" onclick="clearActivityLog()" style="font-size:11px;color:var(--red)">🗑️ مسح السجل</button>
+    </div>
+    <div class="card">
+      <div class="card-body" id="activityLogContainer" style="padding:0">
+        <div class="alert alert-info" style="margin:12px">جاري التحميل...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== PAGE: BACKUP (OWNER ONLY) ===== -->
+  <div class="page" id="page-backup">
+    <div class="section-title" style="margin-bottom:12px">💾 النسخ الاحتياطي</div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">⬇️ تنزيل نسخة احتياطية</span></div>
+      <div class="card-body">
+        <p class="text-sm text-muted mb-8">تنزيل جميع بيانات النظام (الورديات، المخزون، التوريدات، الإعدادات) كملف JSON</p>
+        <button class="btn btn-primary btn-full" onclick="downloadBackup()" style="padding:12px">⬇️ تنزيل نسخة احتياطية</button>
+      </div>
+    </div>
+    <div class="card mt-8" style="margin-top:12px">
+      <div class="card-header">
+        <span class="card-title">📅 النسخ الاحتياطية التلقائية</span>
+        <button class="btn btn-ghost btn-sm" onclick="renderBackupList()" style="font-size:11px">🔄 تحديث</button>
+      </div>
+      <div id="backupListContainer" style="padding:0">
+        <div class="alert alert-info" style="margin:12px">اضغط تحديث لعرض القائمة</div>
+      </div>
+    </div>
+    <div class="card mt-8" style="margin-top:12px">
+      <div class="card-header"><span class="card-title">⬆️ استعادة من نسخة احتياطية</span></div>
+      <div class="card-body">
+        <p class="text-sm text-muted mb-8">⚠️ تحذير: ستُستبدل جميع البيانات الحالية بالبيانات المستعادة</p>
+        <div class="form-group">
+          <label class="form-label">اختر ملف النسخة الاحتياطية (.json)</label>
+          <input type="file" id="backupFileInput" accept=".json" class="form-input" onchange="previewBackup(this)">
+        </div>
+        <div id="backupPreview" style="display:none;background:var(--gray-100);border-radius:8px;padding:12px;margin-bottom:12px;font-size:12.5px"></div>
+        <button class="btn btn-ghost btn-full" id="restoreBtn" onclick="restoreBackup()" style="display:none;border-color:var(--red);color:var(--red)">⬆️ استعادة البيانات</button>
+      </div>
+    </div>
+
+    <!-- [v15] بطاقة إصلاح سجلات الجرد التاريخية -->
+    <div class="card mt-8" style="margin-top:12px;border:2px solid rgba(47,79,79,0.4)">
+      <div class="card-header" style="background:linear-gradient(90deg,rgba(47,79,79,0.15),transparent)">
+        <span class="card-title" style="color:#2F4F4F">🔧 إصلاح سجلات الجرد التاريخية</span>
+      </div>
+      <div class="card-body">
+        <div class="alert alert-info" style="margin-bottom:12px;font-size:12px">
+          <strong>متى تستخدم هذا؟</strong><br>
+          إذا كانت لديك سجلات جرد قديمة (قبل v15) لا تظهر استهلاكها في جدول العدادات ولا تؤثر في المخزون، فإن هذه الأداة تصلح البيانات التاريخية تلقائياً:
+          <ul style="margin-top:8px;margin-right:12px;font-size:11px">
+            <li>تحسب الاستهلاك لكل عداد جرد من قراءاته</li>
+            <li>تضيف صفوف مخزون للجردات المفقودة</li>
+            <li>تُعيد حساب المخزون الحالي من الصفر</li>
+          </ul>
+        </div>
+        <button class="btn btn-full" onclick="fixHistoricalAuditRecords()"
+          style="background:linear-gradient(135deg,#2F4F4F,#1B2631);color:#A9D5D5;border:2px solid #5D6D7E;padding:12px;font-size:14px;font-weight:800">
+          🔧 إصلاح بيانات الجرد السابقة وإعادة حساب المخزون
+        </button>
+        <p style="font-size:10px;color:var(--gray-500);text-align:center;margin-top:8px">
+          ⚠️ هذه الأداة للمالك فقط — يُنصح بتنزيل نسخة احتياطية أولاً قبل التشغيل
+        </p>
+      </div>
+    </div>
+  </div>
+  <div class="modal-overlay" id="shiftDetailModal">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title" id="shiftDetailTitle">تفاصيل الوردية</span>
+        <button class="modal-close" onclick="closeModal('shiftDetailModal')">✕</button>
+      </div>
+      <div class="modal-body" id="shiftDetailBody"></div>
+    </div>
+  </div>
+
+  <!-- SUPPLY CONFIRM MODAL -->
+  <div class="modal-overlay" id="supplyConfirmModal">
+    <div class="modal">
+      <div class="modal-header" style="background:linear-gradient(135deg,#1A5276,#2471A3)">
+        <span class="modal-title">🚛 تأكيد حفظ التوريد</span>
+        <button class="modal-close" onclick="closeModal('supplyConfirmModal')">✕</button>
+      </div>
+      <div class="modal-body" id="supplyConfirmBody"></div>
+    </div>
+  </div>
+  <!-- [v17] الجرد الآن صفحة مستقلة كاملة (#page-audit) يرسمها audit-page.js — وليس نافذة أو لوحة مضمّنة -->
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     Firebase Config — ملف الإعدادات الخارجي
+     يُهيّئ: firebase, rtdb, fbAuth, STATION_KEY, DB_REF
+     يجب تحميله بعد Firebase CDN وقبل سكريبتات التطبيق
+     ═══════════════════════════════════════════════════════════ -->
+<script src="./firebase-config.js"></script>
+
+<script src="./app-core.js"></script>
+<script src="./app-init.js"></script>
+<script src="./entry.js"></script>
+<script src="./log-meters.js"></script>
+<script src="./inventory-adjust.js"></script>
+<script src="./ui-nav-utils.js"></script>
+<script src="./admin-backup.js"></script>
+<script src="./reports-dashboard.js"></script>
+<!-- ═══════════════════════════════════════════════════════════
+     محرك الحسابات الموحد v1.0
+     يُحمَّل بعد الـ script الرئيسي لضمان أن DB و firebase معرَّفان أولاً
+     ═══════════════════════════════════════════════════════════ -->
+<script src="./accounting-engine.js"></script>
+<script src="./audit-page.js"></script>
+<script src="./counters-handler.js"></script>
+</body>
+</html>
